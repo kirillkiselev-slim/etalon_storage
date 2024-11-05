@@ -8,6 +8,9 @@ from .db import Base
 from app.core.constants import (PRODUCTS_STATUSES, PRODUCTION_BATCHES_STATUSES,
                                 SHIPMENTS_STATUSES)
 
+#  Need a base class to follow DRY ?
+
+
 class Product(Base):
     """
     Класс для представления продукта. Содержит поля:
@@ -19,7 +22,7 @@ class Product(Base):
     __tablename__ = 'products'
     __table_args__ = (
         CheckConstraint(f'status in {PRODUCTS_STATUSES}',
-                        name='check_status')
+                        name='check_product_status')
     )
 
     id: Mapped[int] = mapped_column(
@@ -32,12 +35,8 @@ class Product(Base):
     # price: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
     # amount_left: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    shipment_items: Mapped[list['ShipmentItems']] = relationship(
-        'ShipmentItem', back_populates='product', cascade='all, delete-orphan')
-
-    def validate_status(self, statuses, value):
-        return super().validate_status(
-            statuses=PRODUCTS_STATUSES, value=self.status)
+    # shipment_items: Mapped[list['ShipmentItems']] = relationship(
+    #     'ShipmentItem', back_populates='product', cascade='all, delete-orphan')
 
     def __repr__(self):
         return (f'<Product(id={self.id}, name="{self.name}",'
@@ -48,6 +47,38 @@ class Product(Base):
                 f'Price: {self.price}, Stock: {self.amount_left}')
 
 
+class ProductionBatches(Base):
+
+    __table_name__ = 'production_batches'
+    __table_args__ = (
+        CheckConstraint(f'current_stage in {PRODUCTION_BATCHES_STATUSES}',
+                        name='check_stage')
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    start_date: Mapped[datetime] = mapped_column(DateTime,)  # add validation on this field and choose default value
+    current_stage: Mapped[str] = mapped_column(String(50), nullable=False,
+                                               default='INITIALIZED')
+    product_id: Mapped[str] = mapped_column(String, ForeignKey(
+        'products.model', ondelete='CASCADE'))  # need to cascade ??
+    product: Mapped['Product'] = relationship(
+        'Product', back_populates='product_batches',
+        cascade='all, delete-orphan')
+
+
+class WarehouseInventory(Base):
+    __table_name__ = 'warehouse_inventory'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[str] = mapped_column(String, ForeignKey(
+        'products.id', ondelete='CASCADE'))
+    storage_locations: Mapped[str] = mapped_column(
+        String(50), nullable=False)
+    product: Mapped['Product'] = relationship(
+        'Product', back_populates='product_warehouse',
+        cascade='all, delete-orphan')
+
+
 class Shipment(Base):
     """
     Класс для представления shipment. Содержит поля:
@@ -56,13 +87,17 @@ class Shipment(Base):
     """
 
     __tablename__ = 'orders'
+    __table_args__ = (
+        CheckConstraint(f'status in {SHIPMENTS_STATUSES}',
+                        name='check_shipment_status')
+    )
 
     id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[str] = mapped_column(
         String(255), nullable=False)
     status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default='OUT_OF_STOCK')
+        String(50), nullable=False, default='PENDING')
     shipped_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
@@ -78,7 +113,7 @@ class Shipment(Base):
 
 class ShipmentItems(Base):
     """
-    Класс для представления позиции заказа (ShipementItem).
+    Класс для представления позиции заказа (ShipmentItem).
     Связывает заказ и продукт, указывая количество продукта в заказе.
     Содержит уникальное ограничение на сочетание order_id и
     product_id для предотвращения дублирования.
