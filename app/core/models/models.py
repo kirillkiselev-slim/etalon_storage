@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import (Integer, String, Text, ForeignKey, DECIMAL,
+from sqlalchemy import (Integer, String, ForeignKey, DECIMAL,
                         DateTime, func, UniqueConstraint, CheckConstraint)
 from sqlalchemy.orm import relationship, Mapped, mapped_column, validates
 
@@ -8,10 +8,15 @@ from .db import Base
 from app.core.constants import (PRODUCTS_STATUSES, PRODUCTION_BATCHES_STATUSES,
                                 SHIPMENTS_STATUSES)
 
-#  Need a base class to follow DRY ?
+
+class BaseEntity(Base):
+    __abstract__ = True
+
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True)
 
 
-class Product(Base):
+class Product(BaseEntity):
     """
     Класс для представления продукта. Содержит поля:
     id, name, description, price, amount_left и связь с OrderItem.
@@ -22,21 +27,21 @@ class Product(Base):
     __tablename__ = 'products'
     __table_args__ = (
         CheckConstraint(f'status in {PRODUCTS_STATUSES}',
-                        name='check_product_status')
+                        name='check_product_status'),
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True)
-    model: Mapped[str] = mapped_column(String(255), nullable=False)
+    model: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default='OUT_OF_STOCK',
-    )
-    # description: Mapped[str] = mapped_column(Text, nullable=True)
-    # price: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
-    # amount_left: Mapped[int] = mapped_column(Integer, nullable=False)
+        String(50), nullable=False, default='OUT_OF_STOCK')
 
-    # shipment_items: Mapped[list['ShipmentItems']] = relationship(
-    #     'ShipmentItem', back_populates='product', cascade='all, delete-orphan')
+    production_batches: Mapped['ProductionBatches'] = relationship(
+        'ProductionBatches', back_populates='product',
+        cascade='save-update, merge, expunge, refresh-expire')
+
+    warehouse_inventory: Mapped['WarehouseInventory'] = relationship(
+        'WarehouseInventory', back_populates='product',
+        cascade='save-update, merge, expunge, refresh-expire')
 
     def __repr__(self):
         return (f'<Product(id={self.id}, name="{self.name}",'
@@ -47,71 +52,93 @@ class Product(Base):
                 f'Price: {self.price}, Stock: {self.amount_left}')
 
 
-class ProductionBatches(Base):
+class ProductionBatches(BaseEntity):
+    """
 
-    __table_name__ = 'production_batches'
+    """
+
+    __tablename__ = 'production_batches'
     __table_args__ = (
         CheckConstraint(f'current_stage in {PRODUCTION_BATCHES_STATUSES}',
-                        name='check_stage')
+                        name='check_stage'),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    start_date: Mapped[datetime] = mapped_column(DateTime,)  # add validation on this field and choose default value
+    start_date: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     current_stage: Mapped[str] = mapped_column(String(50), nullable=False,
                                                default='INITIALIZED')
     product_id: Mapped[str] = mapped_column(String, ForeignKey(
-        'products.model', ondelete='CASCADE'))  # need to cascade ??
+        'products.model'))
     product: Mapped['Product'] = relationship(
-        'Product', back_populates='product_batches',
-        cascade='all, delete-orphan')
+        'Product', back_populates='production_batches')
+
+    def __repr__(self):
+        return (f'<ProductionBatches(id={self.id},'
+                f' product_id={self.product_id},'
+                f' current_stage="{self.current_stage}")>')
+
+    def __str__(self):
+        return (f'ProductionBatches # {self.id} with product'
+                f' {self.product.product.model}'
+                f' with stage {self.current_stage}')
 
 
-class WarehouseInventory(Base):
-    __table_name__ = 'warehouse_inventory'
+class WarehouseInventory(BaseEntity):
+    """
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    product_id: Mapped[str] = mapped_column(String, ForeignKey(
+    """
+
+    __tablename__ = 'warehouse_inventory'
+
+    product_id: Mapped[str] = mapped_column(Integer, ForeignKey(
         'products.id', ondelete='CASCADE'))
-    storage_locations: Mapped[str] = mapped_column(
+    storage_location: Mapped[str] = mapped_column(
         String(50), nullable=False)
     product: Mapped['Product'] = relationship(
         'Product', back_populates='product_warehouse',
         cascade='all, delete-orphan')
 
+    def __repr__(self):
+        return (f'<WarehouseInventory(id={self.id},'
+                f' product_id="{self.product_id}"'
+                f' storage_location="{self.storage_location}")>')
 
-class Shipment(Base):
+    def __str__(self):
+        return (f'WarehouseInventory # {self.id} with product'
+                f' {self.producd.product.model}'
+                f' located at {self.storage_location}')
+
+
+class Shipment(BaseEntity):
     """
     Класс для представления shipment. Содержит поля:
     id, shipped_at, product_id и связь с OrderItem.
     По умолчанию статус - "PENDING", дата создания устанавливается автоматически.
     """
 
-    __tablename__ = 'orders'
+    __tablename__ = 'shipment'
     __table_args__ = (
         CheckConstraint(f'status in {SHIPMENTS_STATUSES}',
-                        name='check_shipment_status')
+                        name='check_shipment_status'),
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[str] = mapped_column(
         String(255), nullable=False)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default='PENDING')
     shipped_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime, server_default=func.now(), nullable=False
     )
-    # order_items: Mapped[list['OrderItem']] = relationship(
-    #     'OrderItem', back_populates='order', cascade='all, delete-orphan')
+    shipment_items: Mapped[list['ShipmentItems']] = relationship(
+        'OrderItem', back_populates='shipment', cascade='all, delete-orphan')
 
     def __repr__(self):
-        return f'<Shipment(id={self.id}, status="{self.status}"'
+        return f'<Shipment(id={self.id}, status="{self.status})>"'
 
     def __str__(self):
         return f'Shipment #{self.id} - Status: {self.status}'
 
 
-class ShipmentItems(Base):
+class ShipmentItems(BaseEntity):
     """
     Класс для представления позиции заказа (ShipmentItem).
     Связывает заказ и продукт, указывая количество продукта в заказе.
@@ -123,24 +150,25 @@ class ShipmentItems(Base):
     __table_args__ = (
         UniqueConstraint('shipment_id', 'product_id',
                          name='unique_order_product'),
-        CheckConstraint('quantity >= 0', name='check_amount')
+        CheckConstraint('quantity >= 1', name='check_amount')
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     shipment_id: Mapped[int] = mapped_column(
-        ForeignKey('shipment.id',  ondelete='CASCADE'))
+        ForeignKey('shipment.id', ondelete='CASCADE'))
     product_id: Mapped[int] = mapped_column(
-        ForeignKey('products.id',  ondelete='CASCADE'))
+        ForeignKey('products.id', ondelete='CASCADE'))
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    shipment: Mapped['Shipment'] = relationship('Shipment',
-                                                back_populates='shipment_items')
-    product: Mapped['Product'] = relationship('Product',
-                                              back_populates='shipment_items')
+    shipment: Mapped['Shipment'] = relationship(
+        'Shipment', back_populates='shipment_items',
+        cascade='all, delete-orphan')
+    product: Mapped['Product'] = relationship(
+        'Product', back_populates='shipment_items',
+        cascade='all, delete-orphan')
 
     def __repr__(self):
         return (f'<ShipmentItem(id={self.id}, product_id={self.product_id},'
-                f'quantity ={self.quantity})>')
+                f'quantity={self.quantity})>')
 
     def __str__(self):
         product_model = self.product.model
