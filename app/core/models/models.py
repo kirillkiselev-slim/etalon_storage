@@ -33,7 +33,7 @@ class Product(BaseEntity):
     model: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default='OUT_OF_STOCK')
+        String(50), nullable=False, default='IN_STOCK')
 
     production_batches: Mapped['ProductionBatches'] = relationship(
         'ProductionBatches', back_populates='product',
@@ -42,6 +42,9 @@ class Product(BaseEntity):
     warehouse_inventory: Mapped['WarehouseInventory'] = relationship(
         'WarehouseInventory', back_populates='product',
         cascade='save-update, merge, expunge, refresh-expire')
+    shipment_items: Mapped['ShipmentItems'] = relationship(
+        'ShipmentItems', back_populates='product'
+    )
 
     def __repr__(self):
         return (f'<Product(id={self.id}, name="{self.name}",'
@@ -63,11 +66,12 @@ class ProductionBatches(BaseEntity):
                         name='check_stage'),
     )
 
-    start_date: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    start_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now())
     current_stage: Mapped[str] = mapped_column(String(50), nullable=False,
                                                default='INITIALIZED')
-    product_id: Mapped[str] = mapped_column(String, ForeignKey(
-        'products.model'))
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey(
+        'products.id'))
     product: Mapped['Product'] = relationship(
         'Product', back_populates='production_batches')
 
@@ -94,8 +98,7 @@ class WarehouseInventory(BaseEntity):
     storage_location: Mapped[str] = mapped_column(
         String(50), nullable=False)
     product: Mapped['Product'] = relationship(
-        'Product', back_populates='product_warehouse',
-        cascade='all, delete-orphan')
+        'Product', back_populates='warehouse_inventory',)
 
     def __repr__(self):
         return (f'<WarehouseInventory(id={self.id},'
@@ -111,7 +114,7 @@ class WarehouseInventory(BaseEntity):
 class Shipment(BaseEntity):
     """
     Класс для представления shipment. Содержит поля:
-    id, shipped_at, product_id и связь с OrderItem.
+    id, shipped_at, product_id и связь ShipmentItems.
     По умолчанию статус - "PENDING", дата создания устанавливается автоматически.
     """
 
@@ -129,7 +132,7 @@ class Shipment(BaseEntity):
         DateTime, server_default=func.now(), nullable=False
     )
     shipment_items: Mapped[list['ShipmentItems']] = relationship(
-        'OrderItem', back_populates='shipment', cascade='all, delete-orphan')
+        'ShipmentItems', back_populates='shipment', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Shipment(id={self.id}, status="{self.status})>"'
@@ -160,11 +163,9 @@ class ShipmentItems(BaseEntity):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
 
     shipment: Mapped['Shipment'] = relationship(
-        'Shipment', back_populates='shipment_items',
-        cascade='all, delete-orphan')
+        'Shipment', back_populates='shipment_items')
     product: Mapped['Product'] = relationship(
-        'Product', back_populates='shipment_items',
-        cascade='all, delete-orphan')
+        'Product', back_populates='shipment_items',)
 
     def __repr__(self):
         return (f'<ShipmentItem(id={self.id}, product_id={self.product_id},'
