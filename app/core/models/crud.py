@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from starlette import status
 
 from app.core.models.models import Base
-
+from app.core.constants import PRODUCT_EXISTS
 
 ModelType = TypeVar('ModelType', bound=Base)
 ItemType = TypeVar('ItemType', bound=BaseModel)
@@ -50,3 +50,20 @@ async def get_or_404(
             'status': order.status,
             'products': products
         }
+
+
+async def filter_model_name(
+        db: AsyncSession,
+        model: Type[ModelType],
+        item: ItemType,
+        statement):
+    """
+    Функция, которая проверяет наличие такого же имени продукта.
+    """
+    result = await db.execute(
+        statement(model).filter(model.model == item.model))
+
+    product_in_db = result.scalars().first()
+    if product_in_db:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=PRODUCT_EXISTS)
