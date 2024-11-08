@@ -15,19 +15,26 @@ class BaseConfigModel(BaseModel):
 
 class ProductGet(BaseConfigModel):
     id: int
-    model: str
+    model_name: str
     status: str
 
 
 class ProductCreate(BaseConfigModel):
-    model: str = fields.Field(max_length=255, min_length=3)
+    model_name: str = fields.Field(max_length=255, min_length=3)
     status: str = fields.Field(min_length=5, default='IN_STOCK',
                                pattern=PRODUCT_REGEX,
                                description=PRODUCT_DESCRIPTION_STATUS)
 
 
-class Warehouse(BaseConfigModel):
-    ...
+class WarehouseInventoryPut(BaseConfigModel):
+    storage_location: Annotated[str, fields.Field(
+        min_length=2, max_length=55)]
+
+
+class WarehouseInventoryGet(BaseConfigModel):
+    id: int
+    product_id: int
+    storage_location: str
 
 
 class ProductionBatchesPost(BaseConfigModel):
@@ -42,6 +49,18 @@ class ProductionBatchesPost(BaseConfigModel):
         if date > datetime.datetime.now(datetime.UTC):
             raise ValueError('"Start date" не может быть в будущем!')
         return date
+
+
+class ProductionBatchesGet(BaseConfigModel):
+    id: int
+    product_id: int
+    model_name: str
+
+
+class ProductionBatchesPatchStatus(BaseConfigModel):
+    new_stage: Annotated[str, fields.Field(
+        pattern=PRODUCTION_BATCHES_REGEX,
+        description=PRODUCTION_BATCHES_DESCRIPTION_STATUS)]
 
 
 class Shipment(BaseConfigModel):
