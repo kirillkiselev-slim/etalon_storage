@@ -30,8 +30,8 @@ class Product(BaseEntity):
                         name='check_product_status'),
     )
 
-    model: Mapped[str] = mapped_column(
-        String(255), nullable=False, unique=True)
+    model_name: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default='IN_STOCK')
 
@@ -82,7 +82,7 @@ class ProductionBatches(BaseEntity):
 
     def __str__(self):
         return (f'ProductionBatches # {self.id} with product'
-                f' {self.product.product.model}'
+                f' {self.product.product.model_name}'
                 f' with stage {self.current_stage}')
 
 
@@ -107,7 +107,7 @@ class WarehouseInventory(BaseEntity):
 
     def __str__(self):
         return (f'WarehouseInventory # {self.id} with product'
-                f' {self.producd.product.model}'
+                f' {self.producd.product.model_name}'
                 f' located at {self.storage_location}')
 
 
@@ -143,7 +143,7 @@ class Shipment(BaseEntity):
 
 class ShipmentItems(BaseEntity):
     """
-    Класс для представления позиции заказа (ShipmentItem).
+    Класс для представления позиции заказа (ShipmentItems).
     Связывает заказ и продукт, указывая количество продукта в заказе.
     Содержит уникальное ограничение на сочетание order_id и
     product_id для предотвращения дублирования.
@@ -172,6 +172,6 @@ class ShipmentItems(BaseEntity):
                 f'quantity={self.quantity})>')
 
     def __str__(self):
-        product_model = self.product.model
+        product_model = self.product.model_name
         return (f'OrderItem #{self.id} Product: "{product_model}",'
                 f' Quantity: {self.quantity}')
