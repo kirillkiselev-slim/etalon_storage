@@ -1,4 +1,4 @@
-from typing import List, Type, Union
+from typing import List, Type, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -12,7 +12,9 @@ from app.core.models.models import (Product, ProductionBatches,
                                     ShipmentItems)
 from app.core.schemas.schemas import (ProductGet, ProductCreate,
                                       ProductionBatchesPost,
-                                      ProductionBatchesPatchStatus)
+                                      ProductionBatchesPatchStatus,
+                                      WarehouseInventoryPut,
+                                      WarehouseInventoryGet)
 from app.core.models.db import get_db
 from .endpoints import (production_batches, products,
                         warehouse, healthcheck)
@@ -21,8 +23,8 @@ from app.core.models.crud import (get_or_404, filter_model_name, ModelType,
 from app.api.constants_api import PRODUCTION_BATCH_CREATION_ERROR
 
 
-def structure_response_for_batch(
-        product_model: Union[str, None], batch: Type[ModelType]):
+def structure_response_for_batch(batch: Type[ModelType],
+                                 product_model: Optional[str] = None):
     response_batch_content = {
         'id': batch.id,
         'product_id': batch.product_id,
@@ -48,16 +50,17 @@ async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
                             identifier=product_id)
 
 
-@products.post('/', response_class=JSONResponse,
-               status_code=status.HTTP_201_CREATED)
+@products.post('/', response_class=JSONResponse)
 async def post_product(new_product: ProductCreate,
                        db: AsyncSession = Depends(get_db)):
+    success_message = {'success': 'model name saved!'}
     await filter_model_name(db=db, model=Product, item=new_product)
     new_product = Product(**new_product.model_dump())
     db.add(new_product)
     await db.commit()
     await db.refresh(new_product)
-    return JSONResponse(content={'success': 'model name saved!'})
+    return JSONResponse(content=success_message,
+                        status_code=status.HTTP_201_CREATED)
 
 
 @products.delete('/{product_id}', status_code=status.HTTP_204_NO_CONTENT)
@@ -67,8 +70,7 @@ async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
 
-@production_batches.post('/', response_class=JSONResponse,
-                         status_code=status.HTTP_201_CREATED)
+@production_batches.post('/', response_class=JSONResponse)
 async def post_production_batch(
         production_batch: ProductionBatchesPost,
         db: AsyncSession = Depends(get_db)):
@@ -86,8 +88,10 @@ async def post_production_batch(
     if fetched_data:
         product_model, batch = fetched_data
 
-        response_content = structure_response_for_batch(product_model, batch)
-        return JSONResponse(content=response_content)
+        response_content = structure_response_for_batch(
+            product_model=product_model, batch=batch)
+        return JSONResponse(content=response_content,
+                            status_code=status.HTTP_201_CREATED)
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=PRODUCTION_BATCH_CREATION_ERROR)
 
@@ -104,8 +108,7 @@ async def modify_production_batch_status(
     current_batch.current_stage = new_stage.new_stage
     await db.commit()
     await db.refresh(current_batch)
-    updated_batch = structure_response_for_batch(
-        product_model=None, batch=current_batch)
+    updated_batch = structure_response_for_batch(batch=current_batch)
     updated_batch.update({'previous_stage': previous_stage})
     response_content = {
         'message': 'Stage updated successfully.',
@@ -113,14 +116,30 @@ async def modify_production_batch_status(
     }
     return JSONResponse(content=response_content)
 
-#
-# @warehouse.put('/receive-batch/{batch_id}', response_model=...,
-#                status_code=status.HTTP_200_OK)
-# async def receive_batch_in_warehouse(batch_id: int,
-#                                db: AsyncSession = Depends(get_db)):
-#     ...
-#
-#
+
+@warehouse.put('/receive-batch/{batch_id}', response_class=JSONResponse,
+               status_code=status.HTTP_200_OK)
+async def receive_batch_in_warehouse(
+        batch_id: int, new_inventory_batch: WarehouseInventoryPut,
+        db: AsyncSession = Depends(get_db)):
+    success_message = {'message': 'Batch received successfully.'}
+    batch = await get_or_404(db=db, model=ProductionBatches,
+                             identifier=batch_id)
+    received_batch_in_warehouse = WarehouseInventory(
+        product_id=batch.product_id, **new_inventory_batch.model_dump())
+    db.add(received_batch_in_warehouse)
+    await db.commit()
+    await db.refresh(received_batch_in_warehouse)
+    created_batch = await db.get(
+        WarehouseInventory, received_batch_in_warehouse.id)
+    success_message.update({
+        'received_batch': WarehouseInventoryGet.from_orm(
+            created_batch).model_dump()})
+    return JSONResponse(
+        content=success_message, status_code=status.HTTP_200_OK
+    )
+
+
 # @warehouse.get('/inventory', response_model=...,
 #                status_code=status.HTTP_200_OK)
 # async def get_all_inventory(db: AsyncSession = Depends(get_db)):
