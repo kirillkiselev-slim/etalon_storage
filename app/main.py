@@ -1,11 +1,11 @@
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 
 from app.api.v1.endpoints import products, production_batches, warehouse, healthcheck
-from app.core.models.db import sessionmanager, get_db, create_all_tables
-from app.api.v1.api import api
+from app.core.models.db import sessionmanager, create_all_tables
+from app.api.v1 import api
 
 
 @asynccontextmanager
@@ -19,11 +19,11 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(lifespan=lifespan, title='Storage', docs_url='/api/docs',
               redoc_url='/api/redoc')
 
-api_start = ...
+api_start = api
 
 app.include_router(products)
-# app.include_router()
-# app.include_router()
+app.include_router(production_batches)
+app.include_router(warehouse)
 # app.include_router()
 
 
