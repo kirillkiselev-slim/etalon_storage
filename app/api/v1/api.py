@@ -77,10 +77,12 @@ async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
 async def post_production_batch(
         production_batch: ProductionBatchesPost,
         db: AsyncSession = Depends(get_db)):
-    await get_or_404(
-        db=db, model=Product, identifier=production_batch.product_uuid)
+    product = await get_or_404(
+        db=db, model=Product, uuid_identifier=production_batch.product_id)
 
-    new_production_batch = ProductionBatches(**production_batch.model_dump())
+    new_production_batch = ProductionBatches(
+        product_id=product.id, **production_batch.model_dump(
+            exclude={'product_id'}))
     db.add(new_production_batch)
     await db.commit()
     await db.refresh(new_production_batch)
@@ -129,8 +131,9 @@ async def receive_batch_in_warehouse(
     batch = await get_or_404(db=db, model=ProductionBatches,
                              identifier=batch_id)
     if batch.current_stage != 'COMPLETED':
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=ERROR_STATUS_RECEIVE_BATCH)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_STATUS_RECEIVE_BATCH)
 
     received_batch_in_warehouse = WarehouseInventory(
         product_id=batch.product_id, **new_inventory_batch.model_dump())
