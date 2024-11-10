@@ -20,7 +20,8 @@ from .endpoints import (production_batches, products,
                         warehouse, healthcheck)
 from app.core.models.crud import (get_or_404, filter_model_name, ModelType,
                                   joined_production_batch_with_product)
-from app.api.constants_api import PRODUCTION_BATCH_CREATION_ERROR
+from app.api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
+                                   ERROR_STATUS_RECEIVE_BATCH)
 
 
 def structure_response_for_batch(batch: Type[ModelType],
@@ -29,7 +30,8 @@ def structure_response_for_batch(batch: Type[ModelType],
         'id': batch.id,
         'product_id': batch.product_id,
         'start_date': batch.start_date.isoformat(),
-        'current_stage': batch.current_stage
+        'current_stage': batch.current_stage,
+        'quantity_produced': batch.quantity_in_batch
     }
     if product_model is not None:
         response_batch_content.update({'product_model': product_model})
@@ -50,32 +52,33 @@ async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
                             identifier=product_id)
 
 
-@products.post('/', response_class=JSONResponse)
-async def post_product(new_product: ProductCreate,
-                       db: AsyncSession = Depends(get_db)):
-    success_message = {'success': 'model name saved!'}
-    await filter_model_name(db=db, model=Product, item=new_product)
-    new_product = Product(**new_product.model_dump())
-    db.add(new_product)
-    await db.commit()
-    await db.refresh(new_product)
-    return JSONResponse(content=success_message,
-                        status_code=status.HTTP_201_CREATED)
-
-
-@products.delete('/{product_id}', status_code=status.HTTP_204_NO_CONTENT)
-async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
-    product = await get_or_404(db=db, model=Product, identifier=product_id)
-    await db.delete(product)
-    await db.commit()
+#
+# @products.post('/', response_class=JSONResponse)
+# async def post_product(new_product: ProductCreate,
+#                        db: AsyncSession = Depends(get_db)):
+#     success_message = {'success': 'model name saved!'}
+#     await filter_model_name(db=db, model=Product, item=new_product)
+#     new_product = Product(**new_product.model_dump())
+#     db.add(new_product)
+#     await db.commit()
+#     await db.refresh(new_product)
+#     return JSONResponse(content=success_message,
+#                         status_code=status.HTTP_201_CREATED)
+#
+#
+# @products.delete('/{product_id}', status_code=status.HTTP_204_NO_CONTENT)
+# async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
+#     product = await get_or_404(db=db, model=Product, identifier=product_id)
+#     await db.delete(product)
+#     await db.commit()
 
 
 @production_batches.post('/', response_class=JSONResponse)
 async def post_production_batch(
         production_batch: ProductionBatchesPost,
         db: AsyncSession = Depends(get_db)):
-    await get_or_404(db=db, model=Product,
-                     identifier=production_batch.product_id)
+    await get_or_404(
+        db=db, model=Product, identifier=production_batch.product_uuid)
 
     new_production_batch = ProductionBatches(**production_batch.model_dump())
     db.add(new_production_batch)
@@ -125,6 +128,10 @@ async def receive_batch_in_warehouse(
     success_message = {'message': 'Batch received successfully.'}
     batch = await get_or_404(db=db, model=ProductionBatches,
                              identifier=batch_id)
+    if batch.current_stage != 'COMPLETED':
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=ERROR_STATUS_RECEIVE_BATCH)
+
     received_batch_in_warehouse = WarehouseInventory(
         product_id=batch.product_id, **new_inventory_batch.model_dump())
     db.add(received_batch_in_warehouse)
@@ -138,7 +145,6 @@ async def receive_batch_in_warehouse(
     return JSONResponse(
         content=success_message, status_code=status.HTTP_200_OK
     )
-
 
 # @warehouse.get('/inventory', response_model=...,
 #                status_code=status.HTTP_200_OK)
