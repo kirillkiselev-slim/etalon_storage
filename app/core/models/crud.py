@@ -16,6 +16,7 @@ async def get_or_404(
         db: AsyncSession,
         model: Type[ModelType],
         identifier: Optional[int] = None,
+        uuid_identifier: Optional[str] = None
 ) -> ModelType:
     """
     Функция, которая возвращает объект по ИД. Если select_load=True,
@@ -23,13 +24,20 @@ async def get_or_404(
     """
     exception = HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'{model.__name__} с ИД {identifier} не найден.'
+                detail=f'{model.__name__} with ID {identifier} is not found'
             )
-    if identifier:
+    if identifier and uuid_identifier is None:
         obj = await db.get(model, identifier)
-        if not obj:
-            raise exception
-        return obj
+        if obj:
+            return obj
+        raise exception
+    else:
+        obj = await db.execute(select(model).filter(
+            model.product_uuid == uuid_identifier))
+        fetched_obj = obj.scalar()
+        if fetched_obj:
+            return fetched_obj
+        raise exception
 
     # elif join_load and identifier:
     #     query = await db.execute(
@@ -58,22 +66,22 @@ async def joined_production_batch_with_product(
 ) -> ModelType:
     result = await db.execute(
         select(model1.model_name, model2)
-        .join(model1, model1.id == model2.product_id)
+        .join(model1, model1.id == model2.id)
         .filter(model2.id == identifier)
     )
     fetched_data = result.first()
     return fetched_data
 
 
-async def filter_model_name(
+async def filter_batch_id_in_warehous(
         db: AsyncSession,
         model: Type[ModelType],
-        item: ItemType):
+        batch_id: int):
     """
     Функция, которая проверяет наличие такого же имени продукта.
     """
     result = await db.execute(
-        select(model).filter(model.model_name == item.model_name))
+        select(model).filter(model.batch_id == batch_id))
 
     product_in_db = result.scalars().first()
     if product_in_db:
