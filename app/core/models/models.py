@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (Integer, String, ForeignKey, DECIMAL,
+from sqlalchemy import (Integer, String, ForeignKey, Boolean,
                         DateTime, func, UniqueConstraint, CheckConstraint)
 from sqlalchemy.orm import relationship, Mapped, mapped_column, validates
 
@@ -101,7 +101,7 @@ class WarehouseInventory(BaseEntity):
 
     __tablename__ = 'warehouse_inventory'
     __table_args__ = (
-        CheckConstraint('quantity_received >= 0', name='check_amount'),
+        CheckConstraint('stock_quantity >= 0', name='check_amount'),
     )
 
     product_id: Mapped[int] = mapped_column(ForeignKey(
@@ -110,11 +110,13 @@ class WarehouseInventory(BaseEntity):
         String(50), nullable=False)
     product: Mapped['Product'] = relationship(
         'Product', back_populates='warehouse_inventory')
-    quantity_received: Mapped[int] = mapped_column(Integer, nullable=False)
+    stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     batch_id: Mapped[int] = mapped_column(
         ForeignKey('production_batches.id'), nullable=False)
     batch: Mapped['ProductionBatches'] = relationship(
         'ProductionBatches', back_populates='warehouse_inventory')
+    in_shipment: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False)
 
     def __repr__(self):
         return (f'<WarehouseInventory(id={self.id},'
@@ -141,7 +143,7 @@ class Shipment(BaseEntity):
     )
 
     order_id: Mapped[str] = mapped_column(
-        String(255), nullable=False)
+        String(255), nullable=False, unique=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default='PENDING')
     shipped_at: Mapped[datetime] = mapped_column(

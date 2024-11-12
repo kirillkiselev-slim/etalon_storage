@@ -1,7 +1,7 @@
 from typing import List, Type, Optional, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from fastapi import Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
@@ -9,7 +9,7 @@ from fastapi.exceptions import HTTPException
 from app.core.models.models import (Product, ProductionBatches,
                                     WarehouseInventory, Shipment,
                                     ShipmentItems)
-from app.core.schemas.schemas import (ProductGet, ProductCreate,
+from app.core.schemas.schemas import (ProductGet, ShipmentPost,
                                       ProductionBatchesPost,
                                       ProductionBatchesPatchStatus,
                                       WarehouseInventoryPut,
@@ -19,7 +19,8 @@ from app.core.models.db import get_db
 from .endpoints import (production_batches, products,
                         warehouse, healthcheck)
 from app.core.models.crud import (get_or_404, ModelType,
-                                  joined_production_batch_with_product)
+                                  joined_production_batch_with_product,
+                                  generate_unique_order_id)
 from app.api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
                                    ERROR_STATUS_RECEIVE_BATCH,
                                    ERROR_BATCH_ID_RECEIVE_BATCH)
@@ -169,8 +170,7 @@ async def get_all_inventory(db: AsyncSession = Depends(get_db)):
     query_models = await db.execute(
         select(WarehouseInventory))
     results = query_models.scalars().all()
-    print(f'WITH just ALL: {query_models.all()}')
-    print(f'WITH SCALARS AND ALL: {results}')
+
     inventory = [
         WarehouseInventoryGet.from_orm(row).model_dump(
             exclude={'id'}, by_alias=True
@@ -180,7 +180,22 @@ async def get_all_inventory(db: AsyncSession = Depends(get_db)):
     return JSONResponse(content=inventory_dict,
                         status_code=status.HTTP_200_OK)
 
-# @warehouse.post('/shipments', response_model=...,
-#                status_code=status.HTTP_201_CREATED)
-# async def post_order(db: AsyncSession = Depends(get_db)):
-#     ...
+
+@warehouse.post('/shipments', response_class=JSONResponse,
+               status_code=status.HTTP_201_CREATED)
+async def post_order(
+        new_shipment: ShipmentPost,
+        db: AsyncSession = Depends(get_db)):
+    order_id = await generate_unique_order_id(db=db, model=Shipment)
+    sent_batches = [await get_or_404(
+        db=db, model=WarehouseInventory,
+        identifier=batch.batch_id) for batch in new_shipment.items]
+
+    await db.execute(update(WarehouseInventory).where(
+        WarehouseInventory.batch_id.in_(
+            [batch.batch_id for batch in sent_batches])).values(
+        in_shipment=True
+    ))
+    await db.commit()
+    return 'Nice'
+

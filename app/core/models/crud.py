@@ -1,6 +1,9 @@
-from typing import Type, TypeVar, Dict, Optional
+import string
+import random
+from typing import Type, TypeVar, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from starlette import status
@@ -39,23 +42,16 @@ async def get_or_404(
             return fetched_obj
         raise exception
 
-    # elif join_load and identifier:
-    #     query = await db.execute(
-    #         select(model).options(
-    #             joinedload(model.order_items)).where(model.id == identifier)
-    #     )
-    #     order = query.scalars().first()
-    #
-    #     if not order:
-    #         raise exception
-    #     products = {item.product_id: item.amount_of_product
-    #                 for item in order.order_items}
-    #     return {
-    #         'id': order.id,
-    #         'created_at': order.created_at,
-    #         'status': order.status,
-    #         'products': products
-    #     }
+
+async def generate_unique_order_id(
+        db: AsyncSession, model: Type[ModelType]) -> str:
+    while True:
+        order_id = 'ORD' + ''.join(random.choice(string.digits)
+                                   for _ in range(6))
+        result = await db.execute(select(model).filter_by(order_id=order_id))
+        existing_order = result.scalar()
+        if not existing_order:
+            return order_id
 
 
 async def joined_production_batch_with_product(
@@ -73,7 +69,7 @@ async def joined_production_batch_with_product(
     return fetched_data
 
 
-async def filter_batch_id_in_warehous(
+async def filter_batch_id_in_warehouse(
         db: AsyncSession,
         model: Type[ModelType],
         batch_id: int):
