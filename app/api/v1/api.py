@@ -1,11 +1,10 @@
-from typing import List, Type, Optional
+from typing import List, Type, Optional, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
-from pydantic import ValidationError
 
 from app.core.models.models import (Product, ProductionBatches,
                                     WarehouseInventory, Shipment,
@@ -14,14 +13,16 @@ from app.core.schemas.schemas import (ProductGet, ProductCreate,
                                       ProductionBatchesPost,
                                       ProductionBatchesPatchStatus,
                                       WarehouseInventoryPut,
+                                      ReceiveBatchInWarehouseGet,
                                       WarehouseInventoryGet)
 from app.core.models.db import get_db
 from .endpoints import (production_batches, products,
                         warehouse, healthcheck)
-from app.core.models.crud import (get_or_404, filter_model_name, ModelType,
+from app.core.models.crud import (get_or_404, ModelType,
                                   joined_production_batch_with_product)
 from app.api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
-                                   ERROR_STATUS_RECEIVE_BATCH)
+                                   ERROR_STATUS_RECEIVE_BATCH,
+                                   ERROR_BATCH_ID_RECEIVE_BATCH)
 
 
 def structure_response_for_batch(batch: Type[ModelType],
@@ -31,7 +32,7 @@ def structure_response_for_batch(batch: Type[ModelType],
         'product_id': batch.product_id,
         'start_date': batch.start_date.isoformat(),
         'current_stage': batch.current_stage,
-        'quantity_produced': batch.quantity_in_batch
+        'quantity_to_be_produced': batch.quantity_in_batch
     }
     if product_model is not None:
         response_batch_content.update({'product_model': product_model})
@@ -122,8 +123,7 @@ async def modify_production_batch_status(
     return JSONResponse(content=response_content)
 
 
-@warehouse.put('/receive-batch/{batch_id}', response_class=JSONResponse,
-               status_code=status.HTTP_200_OK)
+@warehouse.put('/receive-batch/{batch_id}', response_class=JSONResponse)
 async def receive_batch_in_warehouse(
         batch_id: int, new_inventory_batch: WarehouseInventoryPut,
         db: AsyncSession = Depends(get_db)):
@@ -134,22 +134,53 @@ async def receive_batch_in_warehouse(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_STATUS_RECEIVE_BATCH)
+    batch_inventory_query = await db.execute(
+        select(WarehouseInventory).filter(
+            WarehouseInventory.batch_id == batch_id)
+    )
+    batch_exists = batch_inventory_query.scalar_one_or_none()
+    if batch_exists:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_BATCH_ID_RECEIVE_BATCH
+        )
 
     received_batch_in_warehouse = WarehouseInventory(
-        product_id=batch.product_id, **new_inventory_batch.model_dump())
+        product_id=batch.product_id, batch_id=batch_id,
+        stock_quantity=new_inventory_batch.quantity_received,
+        **new_inventory_batch.model_dump(exclude={'quantity_received'}))
     db.add(received_batch_in_warehouse)
     await db.commit()
     await db.refresh(received_batch_in_warehouse)
     created_batch = await db.get(
         WarehouseInventory, received_batch_in_warehouse.id)
     success_message.update({
-        'received_batch': WarehouseInventoryGet.from_orm(
+        'received_batch': ReceiveBatchInWarehouseGet.from_orm(
             created_batch).model_dump()})
     return JSONResponse(
         content=success_message, status_code=status.HTTP_200_OK
     )
 
-# @warehouse.get('/inventory', response_model=...,
-#                status_code=status.HTTP_200_OK)
-# async def get_all_inventory(db: AsyncSession = Depends(get_db)):
+
+@warehouse.get('/inventory',
+               response_class=JSONResponse)
+async def get_all_inventory(db: AsyncSession = Depends(get_db)):
+    inventory_dict = {'inventory': []}
+    query_models = await db.execute(
+        select(WarehouseInventory))
+    results = query_models.scalars().all()
+    print(f'WITH just ALL: {query_models.all()}')
+    print(f'WITH SCALARS AND ALL: {results}')
+    inventory = [
+        WarehouseInventoryGet.from_orm(row).model_dump(
+            exclude={'id'}, by_alias=True
+        ) for row in results
+    ]
+    inventory_dict['inventory'] = inventory
+    return JSONResponse(content=inventory_dict,
+                        status_code=status.HTTP_200_OK)
+
+# @warehouse.post('/shipments', response_model=...,
+#                status_code=status.HTTP_201_CREATED)
+# async def post_order(db: AsyncSession = Depends(get_db)):
 #     ...
