@@ -20,7 +20,8 @@ from .endpoints import (production_batches, products,
                         warehouse, healthcheck)
 from app.core.models.crud import (get_or_404, ModelType,
                                   joined_production_batch_with_product,
-                                  generate_unique_order_id)
+                                  generate_unique_order_id,
+                                  filter_batch)
 from app.api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
                                    ERROR_STATUS_RECEIVE_BATCH,
                                    ERROR_BATCH_ID_RECEIVE_BATCH)
@@ -163,8 +164,7 @@ async def receive_batch_in_warehouse(
     )
 
 
-@warehouse.get('/inventory',
-               response_class=JSONResponse)
+@warehouse.get('/inventory', response_class=JSONResponse)
 async def get_all_inventory(db: AsyncSession = Depends(get_db)):
     inventory_dict = {'inventory': []}
     query_models = await db.execute(
@@ -182,20 +182,41 @@ async def get_all_inventory(db: AsyncSession = Depends(get_db)):
 
 
 @warehouse.post('/shipments', response_class=JSONResponse,
-               status_code=status.HTTP_201_CREATED)
+                status_code=status.HTTP_201_CREATED)
 async def post_order(
         new_shipment: ShipmentPost,
         db: AsyncSession = Depends(get_db)):
     order_id = await generate_unique_order_id(db=db, model=Shipment)
-    sent_batches = [await get_or_404(
-        db=db, model=WarehouseInventory,
-        identifier=batch.batch_id) for batch in new_shipment.items]
+    batch_ids = [order.batch_id for order in new_shipment.items]
+    batches_checked = await filter_batch(
+        db=db, model=WarehouseInventory, batch_ids=batch_ids)
+    await filter_batch(db=db, model=ShipmentItems, batch_ids=batch_ids,
+                       check_shipments=True)
 
     await db.execute(update(WarehouseInventory).where(
         WarehouseInventory.batch_id.in_(
-            [batch.batch_id for batch in sent_batches])).values(
-        in_shipment=True
+            [inventory.batch_id for inventory in batches_checked])).values(
+        in_shipment=True, stock_quantity=0
     ))
-    await db.commit()
-    return 'Nice'
 
+    shipment = Shipment(order_id=order_id, status=new_shipment.status)
+    db.add(shipment)
+    await db.flush()
+
+    shipment_items = [ShipmentItems(
+        shipment_id=shipment.id, batch_id=batch_id) for batch_id in batch_ids]
+    db.add_all(shipment_items)
+
+    await db.flush()
+    await db.commit()
+    await db.refresh(shipment)
+    response_data = {
+        'shipment_id': shipment.id,
+        'order_id': shipment.order_id,
+        'items': [{'batch_id': batch} for batch in batch_ids],
+        'status': shipment.status
+    }
+    return response_data
+    # return JSONResponse(
+    #     content=response_data,
+    #     status_code=status.HTTP_201_CREATED)
