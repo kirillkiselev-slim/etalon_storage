@@ -7,7 +7,8 @@ PRODUCTION_BATCHES_REGEX = '^(' + '|'.join(PRODUCTION_BATCHES_STATUSES) + ')$'
 PRODUCTION_BATCHES_DESCRIPTION_STATUS = ', '.join(PRODUCTION_BATCHES_STATUSES)
 
 PRODUCTS_STATUSES = ('IN_PRODUCTION', 'IN_STOCK', 'OUT_OF_STOCK')
-PRODUCT_EXISTS = 'Product with that name already exists!'
+BATCH_DOES_NOT_EXIST = 'One or more batch IDs do not exist'
+BATCH_EXISTS_IN_SHIPMENTS = 'One or more batches have already been added in shipments'
 PRODUCT_REGEX = '^(' + '|'.join(PRODUCTS_STATUSES) + ')$'
 PRODUCT_DESCRIPTION_STATUS = ', '.join(PRODUCTS_STATUSES)
 
