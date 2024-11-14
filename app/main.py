@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
-from app.api.v1.endpoints import products, production_batches, warehouse, healthcheck
-from app.core.models.db import sessionmanager, create_all_tables
-from app.api.v1 import api
+from api.v1.endpoints import products, production_batches, warehouse, healthcheck
+from core.models.db import sessionmanager, create_all_tables
+from api.v1 import api
 
 
 @asynccontextmanager
