@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from starlette import status
 
-from app.core.models.models import Base
-from app.core.constants import PRODUCT_EXISTS
+from core.models.models import Base
+from core.constants import BATCH_DOES_NOT_EXIST, BATCH_EXISTS_IN_SHIPMENTS
 
 ModelType = TypeVar('ModelType', bound=Base)
 ItemType = TypeVar('ItemType', bound=BaseModel)
@@ -25,9 +25,11 @@ async def get_or_404(
     Функция, которая возвращает объект по ИД. Если select_load=True,
     то выполняется запрос для выборки полей product_id и amount_of_product.
     """
+    identifier_info = identifier if identifier else uuid_identifier
     exception = HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'{model.__name__} with ID {identifier} is not found'
+                detail=f'{model.__name__} with ID '
+                       f'{identifier_info} is not found'
             )
     if identifier and uuid_identifier is None:
         obj = await db.get(model, identifier)
@@ -61,7 +63,7 @@ async def joined_production_batch_with_product(
         identifier: Optional[int] = None,
 ) -> ModelType:
     result = await db.execute(
-        select(model1.model_name, model2)
+        select(model1.name_model, model2)
         .join(model1, model1.id == model2.id)
         .filter(model2.id == identifier)
     )
@@ -69,17 +71,24 @@ async def joined_production_batch_with_product(
     return fetched_data
 
 
-async def filter_batch_id_in_warehouse(
+async def filter_batch_ids(
         db: AsyncSession,
         model: Type[ModelType],
-        batch_id: int):
+        batch_ids: list,
+        check_shipments: bool = False):
     """
-    Функция, которая проверяет наличие такого же имени продукта.
-    """
-    result = await db.execute(
-        select(model).filter(model.batch_id == batch_id))
 
-    product_in_db = result.scalars().first()
-    if product_in_db:
+    """
+    result = await db.execute(select(model).filter(
+        model.batch_id.in_(batch_ids)))
+
+    result_batches = result.scalars().all()
+    if len(result_batches) != len(batch_ids) and not check_shipments:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=PRODUCT_EXISTS)
+                            detail=BATCH_DOES_NOT_EXIST)
+    elif result_batches and check_shipments:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=BATCH_EXISTS_IN_SHIPMENTS)
+    return result_batches
+
+

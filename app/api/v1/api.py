@@ -11,30 +11,29 @@ from fastapi.exceptions import HTTPException
 from dotenv import load_dotenv
 
 from core.models.models import (Product, ProductionBatches,
-                                    WarehouseInventory, Shipment,
-                                    ShipmentItems)
+                                WarehouseInventory, Shipment,
+                                ShipmentItems)
 from core.schemas.schemas import (ProductGet, ShipmentPost,
-                                      ProductionBatchesPost,
-                                      ProductionBatchesPatchStatus,
-                                      WarehouseInventoryPut,
-                                      ReceiveBatchInWarehouseGet,
-                                      WarehouseInventoryGet, ShipmentEntity)
+                                  ProductionBatchesPost,
+                                  ProductionBatchesPatchStatus,
+                                  WarehouseInventoryPut,
+                                  ReceiveBatchInWarehouseGet,
+                                  WarehouseInventoryGet, ShipmentEntity)
 from core.models.db import get_db
 from .endpoints import (production_batches, products,
-                        warehouse, healthcheck)
+                        warehouse)
 from core.models.crud import (get_or_404, ModelType,
-                                  joined_production_batch_with_product,
-                                  generate_unique_order_id,
-                                  filter_batch_ids)
+                              joined_production_batch_with_product,
+                              generate_unique_order_id,
+                              filter_batch_ids)
 from api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
-                                   ERROR_STATUS_RECEIVE_BATCH,
-                                   ERROR_BATCH_ID_RECEIVE_BATCH, CACHE_TIME)
+                               ERROR_STATUS_RECEIVE_BATCH,
+                               ERROR_BATCH_ID_RECEIVE_BATCH, CACHE_TIME)
 
 load_dotenv()
 
-
-# redis = asyncredis.from_url(os.getenv('REDIS_URL'), decode_responses=True)
-redis = asyncredis.from_url(os.getenv('REDIS_URL'), decode_responses=True,)
+redis = asyncredis.from_url(os.getenv('REDIS_URL'),
+                            decode_responses=True)
 
 
 def structure_response_for_batch(batch: Type[ModelType],
@@ -166,17 +165,22 @@ async def receive_batch_in_warehouse(
 
 @warehouse.get('/inventory', response_class=JSONResponse)
 async def get_all_inventory(db: AsyncSession = Depends(get_db)):
-    inventory_dict = {'inventory': []}
+    cache_key = 'warehouse_inventory'
+    cached_data = await redis.get(cache_key)
+
+    if cached_data:
+        return json.loads(cached_data)
+
     query_models = await db.execute(
         select(WarehouseInventory))
     results = query_models.scalars().all()
 
     inventory = [
         WarehouseInventoryGet.from_orm(row).model_dump(
-            exclude={'id'}, by_alias=True
-        ) for row in results
+            exclude={'id'}) for row in results
     ]
-    inventory_dict['inventory'] = inventory
+    inventory_dict = {'inventory': inventory}
+    await redis.set(cache_key, json.dumps(inventory_dict), ex=CACHE_TIME)
     return JSONResponse(content=inventory_dict,
                         status_code=status.HTTP_200_OK)
 
@@ -191,7 +195,7 @@ async def post_order(
     batches_checked = await filter_batch_ids(
         db=db, model=WarehouseInventory, batch_ids=batch_ids)
     await filter_batch_ids(db=db, model=ShipmentItems, batch_ids=batch_ids,
-                       check_shipments=True)
+                           check_shipments=True)
 
     await db.execute(update(WarehouseInventory).where(
         WarehouseInventory.batch_id.in_(

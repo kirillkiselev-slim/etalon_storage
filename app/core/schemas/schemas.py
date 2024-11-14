@@ -35,7 +35,7 @@ class ReceiveBatchInWarehouseGet(BaseConfigModel):
 
 
 class WarehouseInventoryGet(BaseConfigModel):
-    product: int = fields.Field(alias='product_id')
+    product_id: int
     stock_quantity: int
     storage_location: str
 
