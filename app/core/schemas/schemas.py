@@ -1,9 +1,9 @@
 import datetime
 import uuid
-from typing import  Annotated
+from typing import Annotated
 
 from pydantic import BaseModel, fields, ConfigDict, field_validator
-from app.core.constants import (PRODUCTION_BATCHES_REGEX,
+from core.constants import (PRODUCTION_BATCHES_REGEX,
                                 PRODUCTION_BATCHES_DESCRIPTION_STATUS,
                                 PRODUCT_DESCRIPTION_STATUS, PRODUCT_REGEX,
                                 SHIPMENTS_REGEX, SHIPMENTS_DESCRIPTION_STATUS, )
@@ -15,15 +15,10 @@ class BaseConfigModel(BaseModel):
 
 class ProductGet(BaseConfigModel):
     id: int
-    model_name: str
+    product_uuid: str
+    name: str
+    name_model: str
     status: str
-
-
-class ProductCreate(BaseConfigModel):
-    model_name: str = fields.Field(max_length=255, min_length=3)
-    status: str = fields.Field(min_length=5, default='IN_STOCK',
-                               pattern=PRODUCT_REGEX,
-                               description=PRODUCT_DESCRIPTION_STATUS)
 
 
 class WarehouseInventoryPut(BaseConfigModel):
@@ -46,7 +41,7 @@ class WarehouseInventoryGet(BaseConfigModel):
 
 
 class ProductionBatchesPost(BaseConfigModel):
-    product_id: uuid.UUID
+    product_id: str
     start_date: datetime.datetime = fields.Field(
         default_factory=lambda: datetime.datetime.now(datetime.UTC),
         validate_default=True)
@@ -70,9 +65,14 @@ class ItemBatchesSchema(BaseConfigModel):
     batch_id: int = fields.Field(gt=0)
 
 
-class ShipmentPost(BaseConfigModel):
-    items: list[ItemBatchesSchema]
+class ShipmentEntity(BaseConfigModel):
     status: str = fields.Field(
         min_length=5, default='PENDING',
         pattern=SHIPMENTS_REGEX,
         description=SHIPMENTS_DESCRIPTION_STATUS)
+
+
+class ShipmentPost(ShipmentEntity):
+    items: list[ItemBatchesSchema]
+
+

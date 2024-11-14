@@ -1,12 +1,11 @@
-import uuid
 from datetime import datetime
 
 from sqlalchemy import (Integer, String, ForeignKey, Boolean,
                         DateTime, func, UniqueConstraint, CheckConstraint)
-from sqlalchemy.orm import relationship, Mapped, mapped_column, validates
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from .db import Base
-from app.core.constants import (PRODUCTS_STATUSES, PRODUCTION_BATCHES_STATUSES,
+from core.constants import (PRODUCTS_STATUSES, PRODUCTION_BATCHES_STATUSES,
                                 SHIPMENTS_STATUSES)
 
 
@@ -27,7 +26,7 @@ class Product(BaseEntity):
         CheckConstraint(f'status in {PRODUCTS_STATUSES}',
                         name='check_product_status'),
     )
-    product_uuid: Mapped[uuid.UUID] = mapped_column(
+    product_uuid: Mapped[str] = mapped_column(
         index=True, nullable=False, unique=True
     )
     name: Mapped[str] = mapped_column(
@@ -35,7 +34,7 @@ class Product(BaseEntity):
     )
     serial_number: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True)
-    model_name: Mapped[str] = mapped_column(
+    name_model: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default='IN_PRODUCTION')
@@ -47,16 +46,13 @@ class Product(BaseEntity):
     warehouse_inventory: Mapped['WarehouseInventory'] = relationship(
         'WarehouseInventory', back_populates='product',
         cascade='save-update, merge, expunge, refresh-expire')
-    shipment_items: Mapped['ShipmentItems'] = relationship(
-        'ShipmentItems', back_populates='product'
-    )
 
     def __repr__(self):
-        return f'<Product(id={self.id}, model_name="{self.model_name}">'
+        return f'<Product(id={self.id}, model_name="{self.name_model}">'
 
     def __str__(self):
         return (f'Product "{self.name}" (ID: {self.id}) - '
-                f'Name: {self.name}, Model name: {self.model_name}')
+                f'Name: {self.name}, Model name: {self.name_model}')
 
 
 class ProductionBatches(BaseEntity):
@@ -82,6 +78,9 @@ class ProductionBatches(BaseEntity):
         'Product', back_populates='production_batches')
     warehouse_inventory: Mapped['WarehouseInventory'] = relationship(
         'WarehouseInventory', back_populates='batch')
+    shipment_items: Mapped[list['ShipmentItems']] = relationship(
+        'ShipmentItems', back_populates='batch',
+        cascade='all, delete-orphan')
 
     def __repr__(self):
         return (f'<ProductionBatches(id={self.id},'
@@ -150,7 +149,8 @@ class Shipment(BaseEntity):
         DateTime, server_default=func.now(), nullable=False
     )
     shipment_items: Mapped[list['ShipmentItems']] = relationship(
-        'ShipmentItems', back_populates='shipment', cascade='all, delete-orphan')
+        'ShipmentItems', back_populates='shipment',
+        cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Shipment(id={self.id}, status="{self.status}>"'
@@ -169,27 +169,16 @@ class ShipmentItems(BaseEntity):
 
     __tablename__ = 'shipment_items'
     __table_args__ = (
-        UniqueConstraint('shipment_id', 'product_id',
-                         name='unique_order_product'),
-        CheckConstraint('quantity >= 1', name='check_amount')
+        UniqueConstraint('shipment_id', 'batch_id',
+                         name='check_batche_shipment'),
     )
 
     shipment_id: Mapped[int] = mapped_column(
         ForeignKey('shipment.id', ondelete='CASCADE'))
-    product_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey('products.id', ondelete='CASCADE'))
-    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    batch_id: Mapped[int] = mapped_column(ForeignKey('production_batches.id',
+                                                     ondelete='CASCADE'))
 
     shipment: Mapped['Shipment'] = relationship(
         'Shipment', back_populates='shipment_items')
-    product: Mapped['Product'] = relationship(
-        'Product', back_populates='shipment_items', )
-
-    def __repr__(self):
-        return (f'<ShipmentItem(id={self.id}, product_id={self.product_id},'
-                f'quantity={self.quantity}>')
-
-    def __str__(self):
-        product_model = self.product.model_name
-        return (f'OrderItem #{self.id} Product: "{product_model}",'
-                f' Quantity: {self.quantity}')
+    batch: Mapped['ProductionBatches'] = relationship(
+        'ProductionBatches', back_populates='shipment_items')

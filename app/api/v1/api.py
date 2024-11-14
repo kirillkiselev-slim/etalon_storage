@@ -1,30 +1,40 @@
-from typing import List, Type, Optional, Dict
+import json
+import os
+from typing import List, Type, Optional
 
+import redis.asyncio as asyncredis
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from fastapi import Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
+from dotenv import load_dotenv
 
-from app.core.models.models import (Product, ProductionBatches,
+from core.models.models import (Product, ProductionBatches,
                                     WarehouseInventory, Shipment,
                                     ShipmentItems)
-from app.core.schemas.schemas import (ProductGet, ShipmentPost,
+from core.schemas.schemas import (ProductGet, ShipmentPost,
                                       ProductionBatchesPost,
                                       ProductionBatchesPatchStatus,
                                       WarehouseInventoryPut,
                                       ReceiveBatchInWarehouseGet,
-                                      WarehouseInventoryGet)
-from app.core.models.db import get_db
+                                      WarehouseInventoryGet, ShipmentEntity)
+from core.models.db import get_db
 from .endpoints import (production_batches, products,
                         warehouse, healthcheck)
-from app.core.models.crud import (get_or_404, ModelType,
+from core.models.crud import (get_or_404, ModelType,
                                   joined_production_batch_with_product,
                                   generate_unique_order_id,
-                                  filter_batch)
-from app.api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
+                                  filter_batch_ids)
+from api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
                                    ERROR_STATUS_RECEIVE_BATCH,
-                                   ERROR_BATCH_ID_RECEIVE_BATCH)
+                                   ERROR_BATCH_ID_RECEIVE_BATCH, CACHE_TIME)
+
+load_dotenv()
+
+
+# redis = asyncredis.from_url(os.getenv('REDIS_URL'), decode_responses=True)
+redis = asyncredis.from_url(os.getenv('REDIS_URL'), decode_responses=True,)
 
 
 def structure_response_for_batch(batch: Type[ModelType],
@@ -44,8 +54,19 @@ def structure_response_for_batch(batch: Type[ModelType],
 @products.get('/', response_model=List[ProductGet],
               status_code=status.HTTP_200_OK)
 async def get_products(db: AsyncSession = Depends(get_db)):
+    cache_key = 'all_products'
+    cached_data = await redis.get(cache_key)
+
+    if cached_data:
+        return json.loads(cached_data)
     result = await db.execute(select(Product))
-    return result.scalars().all()
+    all_products = result.scalars().all()
+
+    serialized_data = [ProductGet.from_orm(product).model_dump()
+                       for product in all_products]
+    await redis.set(cache_key, json.dumps(serialized_data), ex=CACHE_TIME)
+
+    return all_products
 
 
 @products.get('/{product_id}', response_model=ProductGet,
@@ -53,27 +74,6 @@ async def get_products(db: AsyncSession = Depends(get_db)):
 async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
     return await get_or_404(db=db, model=Product,
                             identifier=product_id)
-
-
-#
-# @products.post('/', response_class=JSONResponse)
-# async def post_product(new_product: ProductCreate,
-#                        db: AsyncSession = Depends(get_db)):
-#     success_message = {'success': 'model name saved!'}
-#     await filter_model_name(db=db, model=Product, item=new_product)
-#     new_product = Product(**new_product.model_dump())
-#     db.add(new_product)
-#     await db.commit()
-#     await db.refresh(new_product)
-#     return JSONResponse(content=success_message,
-#                         status_code=status.HTTP_201_CREATED)
-#
-#
-# @products.delete('/{product_id}', status_code=status.HTTP_204_NO_CONTENT)
-# async def delete_product(product_id: int, db: AsyncSession = Depends(get_db)):
-#     product = await get_or_404(db=db, model=Product, identifier=product_id)
-#     await db.delete(product)
-#     await db.commit()
 
 
 @production_batches.post('/', response_class=JSONResponse)
@@ -188,9 +188,9 @@ async def post_order(
         db: AsyncSession = Depends(get_db)):
     order_id = await generate_unique_order_id(db=db, model=Shipment)
     batch_ids = [order.batch_id for order in new_shipment.items]
-    batches_checked = await filter_batch(
+    batches_checked = await filter_batch_ids(
         db=db, model=WarehouseInventory, batch_ids=batch_ids)
-    await filter_batch(db=db, model=ShipmentItems, batch_ids=batch_ids,
+    await filter_batch_ids(db=db, model=ShipmentItems, batch_ids=batch_ids,
                        check_shipments=True)
 
     await db.execute(update(WarehouseInventory).where(
@@ -217,6 +217,16 @@ async def post_order(
         'status': shipment.status
     }
     return response_data
-    # return JSONResponse(
-    #     content=response_data,
-    #     status_code=status.HTTP_201_CREATED)
+
+
+@warehouse.patch('/change-status', response_class=JSONResponse)
+async def change_shipment_status(
+        shipment_id: int, new_status_shipment: ShipmentEntity,
+        db: AsyncSession = Depends(get_db)):
+    success_message = {'status': 'status has been changed'}
+    shipment = await get_or_404(db=db, model=Shipment, identifier=shipment_id)
+    shipment.status = new_status_shipment.status
+    await db.commit()
+
+    return JSONResponse(content=success_message,
+                        status_code=status.HTTP_200_OK)
