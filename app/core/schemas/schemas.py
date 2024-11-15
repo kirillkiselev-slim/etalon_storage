@@ -1,5 +1,4 @@
 import datetime
-import uuid
 from typing import Annotated
 
 from pydantic import BaseModel, fields, ConfigDict, field_validator

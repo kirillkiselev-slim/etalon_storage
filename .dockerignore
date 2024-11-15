@@ -1,0 +1,11 @@
+.venv
+.gitignore
+.env
+*__pycache__*/
+*.idea*/
+*.git/
+app/__pycache__
+app/api/__pycache__
+app/core/__pycache__
+app/tests/__pycache__
+.dockerignore

@@ -1,0 +1,54 @@
+version: "3.7"
+
+networks:
+  backend_network:
+    driver: bridge
+
+services:
+  postgres:
+    image: postgres:14
+    env_file:
+      - .env
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASS}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - backend_network
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    restart: unless-stopped
+
+    volumes:
+      - redis-data:/var/lib/redis/data
+    networks:
+      - backend_network
+    ports:
+      - "6379:6379"
+
+  backend:
+    container_name: backend
+    build: .
+    command: python3 app/main.py
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8002:8002"
+    networks:
+      - backend_network
+
+volumes:
+  db-data:
+  redis-data:

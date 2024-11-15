@@ -67,6 +67,7 @@ sessionmanager = DatabaseSessionManager(
 
 async def create_all_tables():
     async with sessionmanager.connect() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
         await connection.run_sync(Base.metadata.create_all)
 
 
