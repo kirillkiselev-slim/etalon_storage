@@ -23,7 +23,7 @@ touch .env
 type nul > .env2
 ```
 
-3. Запустить Docker Compose для сборки и запуска контейнеров Postgresql и FastApi приложения:
+Запустить Docker Compose для сборки и запуска контейнеров Postgresql и FastApi приложения:
 
    ```bash
     docker compose up --build
@@ -91,7 +91,9 @@ type nul > .env2
 }
 
 ```
+
 **Possible user errors**
+
 Наша партия еще не завершена:
 ```json
 {
@@ -148,6 +150,7 @@ type nul > .env2
 ```
 
 **Possible user errors**
+
 Одна из наших партий не найдена 
 ```json
 {
