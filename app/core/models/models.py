@@ -5,7 +5,7 @@ from sqlalchemy import (Integer, String, ForeignKey, Boolean,
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from .db import Base
-from core.constants import (PRODUCTS_STATUSES, PRODUCTION_BATCHES_STATUSES,
+from app.core.constants import (PRODUCTS_STATUSES, PRODUCTION_BATCHES_STATUSES,
                                 SHIPMENTS_STATUSES)
 
 

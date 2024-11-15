@@ -65,10 +65,10 @@ sessionmanager = DatabaseSessionManager(
     os.getenv('DATABASE_URL'), {'echo': True})
 
 
-async def create_all_tables():
-    async with sessionmanager.connect() as connection:
-        await connection.run_sync(Base.metadata.drop_all)
-        await connection.run_sync(Base.metadata.create_all)
+# async def create_all_tables():
+#     async with sessionmanager.connect() as connection:
+#         await connection.run_sync(Base.metadata.drop_all)
+#         await connection.run_sync(Base.metadata.create_all)
 
 
 async def get_db():

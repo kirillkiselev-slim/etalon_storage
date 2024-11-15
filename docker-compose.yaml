@@ -38,7 +38,7 @@ services:
   backend:
     container_name: backend
     build: .
-    command: python3 app/main.py
+    command: sh -c "alembic upgrade head && cd app && python3 main.py"
     environment:
       DATABASE_URL: ${DATABASE_URL}
     depends_on:
