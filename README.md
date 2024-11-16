@@ -28,7 +28,7 @@ type nul > .env2
 
    ```bash
     docker compose up --build
-    ```
+   ```
    
 Это автоматически соберет образы и запустит контейнеры для PostgreSQL и backend-приложения.
 
