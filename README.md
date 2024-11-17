@@ -27,7 +27,7 @@ type nul > .env2
 Запустить Docker Compose для сборки и запуска контейнеров Postgresql и FastApi приложения:
 
    ```bash
-    docker compose up --build
+    docker compose up --build -d
    ```
    
 Это автоматически соберет образы и запустит контейнеры для PostgreSQL и backend-приложения.
