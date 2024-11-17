@@ -36,7 +36,7 @@ type nul > .env2
 Наполните таблицу продуктами
 
 ```bash 
-docker compose exec postgres psql -U kirillkiselev -d warehouse_etalon -f /docker-entrypoint-initdb.d/init.sql
+docker compose exec postgres psql -U kirillkiselev -d warehouse_etalon -f /tmp/init.sql
 ```
 
 ## Примеры запросов
