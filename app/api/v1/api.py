@@ -245,7 +245,7 @@ async def change_shipment_status(
                         status_code=status.HTTP_200_OK)
 
 
-@healthcheck.get('healthcheck', tags=['healthcheck'],
+@healthcheck.get('/', tags=['healthcheck'],
                  status_code=status.HTTP_200_OK, response_model=HealthCheck,)
 async def get_health() -> HealthCheck:
     return HealthCheck(status='OK')
