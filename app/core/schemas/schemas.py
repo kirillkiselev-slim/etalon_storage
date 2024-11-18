@@ -75,3 +75,5 @@ class ShipmentPost(ShipmentEntity):
     items: list[ItemBatchesSchema]
 
 
+class HealthCheck(BaseModel):
+    status: str = 'OK'

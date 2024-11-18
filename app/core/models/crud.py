@@ -21,10 +21,7 @@ async def get_or_404(
         identifier: Optional[int] = None,
         uuid_identifier: Optional[str] = None
 ) -> ModelType:
-    """
-    Функция, которая возвращает объект по ИД. Если select_load=True,
-    то выполняется запрос для выборки полей product_id и amount_of_product.
-    """
+    """Получает объект по ID или UUID, возвращает 404, если объект не найден."""
     identifier_info = identifier if identifier else uuid_identifier
     exception = HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -47,6 +44,7 @@ async def get_or_404(
 
 async def generate_unique_order_id(
         db: AsyncSession, model: Type[ModelType]) -> str:
+    """Генерирует уникальный идентификатор заказа."""
     while True:
         order_id = 'ORD' + ''.join(random.choice(string.digits)
                                    for _ in range(6))
@@ -62,6 +60,7 @@ async def joined_production_batch_with_product(
         model2: Type[ModelType],
         identifier: Optional[int] = None,
 ) -> ModelType:
+    """Возвращает данные о производственной партии с информацией о продукте."""
     result = await db.execute(
         select(model1.name_model, model2)
         .join(model1, model1.id == model2.id)
@@ -76,9 +75,7 @@ async def filter_batch_ids(
         model: Type[ModelType],
         batch_ids: list,
         check_shipments: bool = False):
-    """
-
-    """
+    """Фильтрует идентификаторы партий и проверяет их наличие."""
     result = await db.execute(select(model).filter(
         model.batch_id.in_(batch_ids)))
 

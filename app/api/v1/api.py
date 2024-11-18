@@ -17,11 +17,11 @@ from core.schemas.schemas import (ProductGet, ShipmentPost,
                                   ProductionBatchesPost,
                                   ProductionBatchesPatchStatus,
                                   WarehouseInventoryPut,
-                                  ReceiveBatchInWarehouseGet,
+                                  ReceiveBatchInWarehouseGet, HealthCheck,
                                   WarehouseInventoryGet, ShipmentEntity)
 from core.models.db import get_db
 from .endpoints import (production_batches, products,
-                        warehouse)
+                        warehouse, healthcheck)
 from core.models.crud import (get_or_404, ModelType,
                               joined_production_batch_with_product,
                               generate_unique_order_id,
@@ -38,6 +38,7 @@ redis = asyncredis.from_url(os.getenv('REDIS_URL'),
 
 def structure_response_for_batch(batch: Type[ModelType],
                                  product_model: Optional[str] = None):
+    """Структурирует ответ для производственной партии."""
     response_batch_content = {
         'id': batch.id,
         'product_id': batch.product_id,
@@ -53,6 +54,7 @@ def structure_response_for_batch(batch: Type[ModelType],
 @products.get('/', response_model=List[ProductGet],
               status_code=status.HTTP_200_OK)
 async def get_products(db: AsyncSession = Depends(get_db)):
+    """Возвращает список всех продуктов."""
     cache_key = 'all_products'
     cached_data = await redis.get(cache_key)
 
@@ -71,6 +73,7 @@ async def get_products(db: AsyncSession = Depends(get_db)):
 @products.get('/{product_id}', response_model=ProductGet,
               status_code=status.HTTP_200_OK)
 async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
+    """Возвращает информацию о продукте по его ID."""
     return await get_or_404(db=db, model=Product,
                             identifier=product_id)
 
@@ -79,6 +82,7 @@ async def get_product(product_id: int, db: AsyncSession = Depends(get_db)):
 async def post_production_batch(
         production_batch: ProductionBatchesPost,
         db: AsyncSession = Depends(get_db)):
+    """Создает новую производственную партию."""
     product = await get_or_404(
         db=db, model=Product, uuid_identifier=production_batch.product_id)
 
@@ -109,6 +113,7 @@ async def modify_production_batch_status(
         new_stage: ProductionBatchesPatchStatus,
         batch_id: int, db: AsyncSession = Depends(get_db),
 ):
+    """Изменяет статус производственной партии."""
     current_batch = await get_or_404(
         db=db, model=ProductionBatches, identifier=batch_id)
     previous_stage = current_batch.current_stage
@@ -128,6 +133,7 @@ async def modify_production_batch_status(
 async def receive_batch_in_warehouse(
         batch_id: int, new_inventory_batch: WarehouseInventoryPut,
         db: AsyncSession = Depends(get_db)):
+    """Принимает партию на склад."""
     success_message = {'message': 'Batch received successfully.'}
     batch = await get_or_404(db=db, model=ProductionBatches,
                              identifier=batch_id)
@@ -165,6 +171,7 @@ async def receive_batch_in_warehouse(
 
 @warehouse.get('/inventory', response_class=JSONResponse)
 async def get_all_inventory(db: AsyncSession = Depends(get_db)):
+    """Возвращает весь складской инвентарь."""
     cache_key = 'warehouse_inventory'
     cached_data = await redis.get(cache_key)
 
@@ -190,6 +197,7 @@ async def get_all_inventory(db: AsyncSession = Depends(get_db)):
 async def post_order(
         new_shipment: ShipmentPost,
         db: AsyncSession = Depends(get_db)):
+    """Создает новый заказ и добавляет его в базу данных."""
     order_id = await generate_unique_order_id(db=db, model=Shipment)
     batch_ids = [order.batch_id for order in new_shipment.items]
     batches_checked = await filter_batch_ids(
@@ -227,6 +235,7 @@ async def post_order(
 async def change_shipment_status(
         shipment_id: int, new_status_shipment: ShipmentEntity,
         db: AsyncSession = Depends(get_db)):
+    """Изменяет статус отгрузки."""
     success_message = {'status': 'status has been changed'}
     shipment = await get_or_404(db=db, model=Shipment, identifier=shipment_id)
     shipment.status = new_status_shipment.status
@@ -234,3 +243,9 @@ async def change_shipment_status(
 
     return JSONResponse(content=success_message,
                         status_code=status.HTTP_200_OK)
+
+
+@healthcheck.get('healthcheck', tags=['healthcheck'],
+                 status_code=status.HTTP_200_OK, response_model=HealthCheck,)
+async def get_health() -> HealthCheck:
+    return HealthCheck(status='OK')

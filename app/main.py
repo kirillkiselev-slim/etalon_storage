@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI
 
-from api.v1.endpoints import products, production_batches, warehouse
+from api.v1.endpoints import products, production_batches, warehouse, healthcheck
 from core.models.db import sessionmanager
 from api.v1 import api
 
@@ -23,7 +23,7 @@ api_start = api
 app.include_router(products)
 app.include_router(production_batches)
 app.include_router(warehouse)
-# app.include_router()
+app.include_router(healthcheck)
 
 
 if __name__ == '__main__':
