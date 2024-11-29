@@ -10,6 +10,8 @@ from starlette import status
 
 from core.models.models import Base
 from core.constants import BATCH_DOES_NOT_EXIST, BATCH_EXISTS_IN_SHIPMENTS
+from core.models import ProductionBatches
+
 
 ModelType = TypeVar('ModelType', bound=Base)
 ItemType = TypeVar('ItemType', bound=BaseModel)
@@ -72,7 +74,7 @@ async def joined_production_batch_with_product(
 
 async def filter_batch_ids(
         db: AsyncSession,
-        model: Type[ModelType],
+        model: ProductionBatches,
         batch_ids: list,
         check_shipments: bool = False):
     """Фильтрует идентификаторы партий и проверяет их наличие."""

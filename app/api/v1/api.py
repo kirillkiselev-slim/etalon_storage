@@ -32,6 +32,7 @@ from api.constants_api import (PRODUCTION_BATCH_CREATION_ERROR,
 
 load_dotenv()
 
+
 redis = asyncredis.from_url(os.getenv('REDIS_URL'),
                             decode_responses=True)
 

@@ -3,9 +3,9 @@ from typing import Annotated
 
 from pydantic import BaseModel, fields, ConfigDict, field_validator
 from core.constants import (PRODUCTION_BATCHES_REGEX,
-                                PRODUCTION_BATCHES_DESCRIPTION_STATUS,
-                                PRODUCT_DESCRIPTION_STATUS, PRODUCT_REGEX,
-                                SHIPMENTS_REGEX, SHIPMENTS_DESCRIPTION_STATUS, )
+                            PRODUCTION_BATCHES_DESCRIPTION_STATUS,
+                            PRODUCT_DESCRIPTION_STATUS, PRODUCT_REGEX,
+                            SHIPMENTS_REGEX, SHIPMENTS_DESCRIPTION_STATUS)
 
 
 class BaseConfigModel(BaseModel):

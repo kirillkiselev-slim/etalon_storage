@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import (Integer, String, ForeignKey, Boolean,
                         DateTime, func, UniqueConstraint, CheckConstraint)
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import relationship, Mapped, mapped_column, Session
 
 from .db import Base
 from app.core.constants import (PRODUCTS_STATUSES, PRODUCTION_BATCHES_STATUSES,
@@ -29,14 +29,14 @@ class Product(BaseEntity):
     product_uuid: Mapped[str] = mapped_column(
         index=True, nullable=False, unique=True
     )
-    name: Mapped[str] = mapped_column(
+    product_name: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True
     )
     serial_number: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True)
     name_model: Mapped[str] = mapped_column(
         String(255), nullable=False, unique=True, index=True)
-    status: Mapped[str] = mapped_column(
+    status: Mapped[str, ] = mapped_column(
         String(50), nullable=False, default='IN_PRODUCTION')
 
     production_batches: Mapped['ProductionBatches'] = relationship(
